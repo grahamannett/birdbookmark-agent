@@ -1,0 +1,22 @@
+[tasks."cookies:extract"]
+description = "Extract Twitter/X cookies from browser to docker/.bird.env"
+run = "bun scripts/extract-bird-cookies.ts env docker/.bird.env"
+
+[tasks."docker:build"]
+description = "Build the bird docker image"
+run = "docker build -t birdapp:latest docker/"
+
+[tasks."docker:run"]
+description = "Run bird in docker (pass args after --)"
+depends = ["cookies:extract"]
+run = "docker run --env-file docker/.bird.env --rm -it birdapp:latest bird"
+
+[tasks."docker:shell"]
+description = "Open a shell in the bird docker container"
+depends = ["cookies:extract"]
+run = "docker run --env-file docker/.bird.env --rm -it birdapp:latest bash"
+
+[tasks."bird:bookmarks"]
+description = "Get your latest bookmarks via docker"
+depends = ["cookies:extract"]
+run = "docker run --env-file docker/.bird.env --rm birdapp:latest bird bookmarks -n 5"

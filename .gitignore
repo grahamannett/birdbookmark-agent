@@ -1,3 +1,10 @@
 .bird.env
 
 _ignore/
+# State and data
+data/
+
+# Environment files
+*.env
+!.env.example
+node_modules/

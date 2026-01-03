@@ -1,0 +1,55 @@
+# Birdbookmark Agent Configuration
+# ================================
+
+# Number of bookmarks to fetch per run
+bookmarkCount = 20
+
+# Path to state file (tracks processed bookmarks)
+statePath = "./data/processed.json"
+
+# Enrichment settings
+# -------------------
+# Controls how bookmarks are enriched with additional content
+[enrichment]
+fetchArticles = true      # Extract article content from linked URLs
+fetchYouTube = true       # Fetch YouTube video transcripts
+expandThreads = true      # Expand Twitter threads
+maxContentLength = 50000  # Max characters to include in prompt
+timeoutMs = 30000         # Timeout for fetching content
+
+# MCP Servers
+# -----------
+# Configure MCP servers for the Agent SDK
+# Each server provides tools the agent can use
+
+[mcpServers.omnifocus]
+command = "npx"
+args = ["-y", "omnifocus-mcp"]
+
+# Uncomment to add Instapaper MCP (when available)
+# [mcpServers.instapaper]
+# command = "npx"
+# args = ["-y", "instapaper-mcp"]
+
+# Uncomment to add Obsidian MCP
+# [mcpServers.obsidian]
+# command = "npx"
+# args = ["-y", "obsidian-mcp-server"]
+# [mcpServers.obsidian.env]
+# OBSIDIAN_VAULT_PATH = "/path/to/your/vault"
+
+# Destinations
+# ------------
+# Enable/disable routing to each destination
+
+[omnifocus]
+enabled = true
+defaultProject = "Twitter Bookmarks"
+defaultTags = ["twitter"]
+
+[instapaper]
+enabled = false
+
+[obsidian]
+enabled = false
+# vaultPath = "/path/to/your/obsidian/vault"

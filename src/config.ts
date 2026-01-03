@@ -1,6 +1,6 @@
 /**
  * Configuration management.
- * Loads from config.json with environment variable overrides.
+ * Loads from config.toml with environment variable overrides.
  *
  * Agent SDK authentication is handled via environment variables:
  * - ANTHROPIC_API_KEY for direct API
@@ -9,6 +9,7 @@
 
 import { existsSync, readFileSync } from "fs"
 import { join } from "path"
+import { parse as parseToml } from "smol-toml"
 
 /**
  * MCP server configuration for Agent SDK.
@@ -87,13 +88,13 @@ const DEFAULT_CONFIG: Config = {
 }
 
 export function loadConfig(configPath?: string): Config {
-  const resolvedPath = configPath ?? join(process.cwd(), "config.json")
+  const resolvedPath = configPath ?? join(process.cwd(), "config.toml")
 
   let fileConfig: Partial<Config> = {}
   if (existsSync(resolvedPath)) {
     try {
       const content = readFileSync(resolvedPath, "utf-8")
-      fileConfig = JSON.parse(content)
+      fileConfig = parseToml(content) as Partial<Config>
     } catch (error) {
       console.error(`Failed to parse config file: ${error}`)
     }

@@ -16,7 +16,7 @@
  * Options:
  *   --dry-run         Don't send to destinations, just log what would happen
  *   --count N         Number of bookmarks to fetch (default: 20)
- *   --config PATH     Path to config file (default: ./config.json)
+ *   --config PATH     Path to config file (default: ./config.toml)
  *   --reprocess ID    Reprocess a specific bookmark by ID
  *   --reprocess last  Reprocess the most recently processed bookmark
  *   --reprocess -N    Reprocess the Nth most recent (e.g., -1 = most recent, -2 = second most recent)

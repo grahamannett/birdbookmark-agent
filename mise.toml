@@ -2,7 +2,9 @@
 # BirdBookmark Agent - Task Runner Configuration
 # =============================================================================
 # Prerequisites:
+#   - Claude Code CLI installed (npm install -g @anthropic-ai/claude-code)
 #   - AWS credentials in environment (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION)
+#   - CLAUDE_CODE_USE_BEDROCK=1 for AWS Bedrock (or ANTHROPIC_API_KEY for direct API)
 #   - Browser with Twitter/X session (for cookie extraction)
 # =============================================================================
 
@@ -24,7 +26,7 @@ else
 fi
 echo ""
 echo "==> Running quick test (dry-run, 1 bookmark)..."
-source docker/.bird.env && bun scripts/process-bookmarks.ts --dry-run --count 1
+source docker/.bird.env && CLAUDE_CODE_USE_BEDROCK=1 bun scripts/process-bookmarks.ts --dry-run --count 1
 """
 
 [tasks."cookies:extract"]
@@ -38,12 +40,12 @@ run = "bun scripts/extract-bird-cookies.ts env docker/.bird.env"
 [tasks.run]
 description = "Process bookmarks locally"
 depends = ["cookies:extract"]
-run = "source docker/.bird.env && bun scripts/process-bookmarks.ts"
+run = "source docker/.bird.env && CLAUDE_CODE_USE_BEDROCK=1 bun scripts/process-bookmarks.ts"
 
 [tasks."run:dry"]
 description = "Process bookmarks locally (dry-run, no actions taken)"
 depends = ["cookies:extract"]
-run = "source docker/.bird.env && bun scripts/process-bookmarks.ts --dry-run"
+run = "source docker/.bird.env && CLAUDE_CODE_USE_BEDROCK=1 bun scripts/process-bookmarks.ts --dry-run"
 
 [tasks."run:list"]
 description = "List recently processed bookmarks"
@@ -52,12 +54,12 @@ run = "bun scripts/process-bookmarks.ts --list"
 [tasks."run:reprocess"]
 description = "Reprocess a bookmark: mise run:reprocess -- -1 (or ID)"
 depends = ["cookies:extract"]
-run = "source docker/.bird.env && bun scripts/process-bookmarks.ts --reprocess=$1"
+run = "source docker/.bird.env && CLAUDE_CODE_USE_BEDROCK=1 bun scripts/process-bookmarks.ts --reprocess=$1"
 
 [tasks.test]
 description = "Quick test: process 1 bookmark in dry-run mode"
 depends = ["cookies:extract"]
-run = "source docker/.bird.env && bun scripts/process-bookmarks.ts --dry-run --count 1"
+run = "source docker/.bird.env && CLAUDE_CODE_USE_BEDROCK=1 bun scripts/process-bookmarks.ts --dry-run --count 1"
 
 # -----------------------------------------------------------------------------
 # Docker (for deployment verification)
@@ -75,8 +77,9 @@ docker run --env-file docker/.bird.env \
   -e AWS_ACCESS_KEY_ID \
   -e AWS_SECRET_ACCESS_KEY \
   -e AWS_REGION \
+  -e CLAUDE_CODE_USE_BEDROCK=1 \
   -v $(pwd)/data:/app/data \
-  -v $(pwd)/config.json:/app/config.json:ro \
+  -v $(pwd)/config.toml:/app/config.toml:ro \
   --rm birdprocessor:latest
 """
 
@@ -88,9 +91,10 @@ docker run --env-file docker/.bird.env \
   -e AWS_ACCESS_KEY_ID \
   -e AWS_SECRET_ACCESS_KEY \
   -e AWS_REGION \
+  -e CLAUDE_CODE_USE_BEDROCK=1 \
   -e DRY_RUN=true \
   -v $(pwd)/data:/app/data \
-  -v $(pwd)/config.json:/app/config.json:ro \
+  -v $(pwd)/config.toml:/app/config.toml:ro \
   --rm birdprocessor:latest
 """
 
@@ -102,8 +106,9 @@ docker run --env-file docker/.bird.env \
   -e AWS_ACCESS_KEY_ID \
   -e AWS_SECRET_ACCESS_KEY \
   -e AWS_REGION \
+  -e CLAUDE_CODE_USE_BEDROCK=1 \
   -v $(pwd)/data:/app/data \
-  -v $(pwd)/config.json:/app/config.json:ro \
+  -v $(pwd)/config.toml:/app/config.toml:ro \
   --rm -it birdprocessor:latest bash
 """
 

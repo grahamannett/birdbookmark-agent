@@ -1,17 +1,39 @@
 /**
  * System and user prompts for the bookmark routing agent.
+ * Updated for Agent SDK with MCP tools.
  */
 
 import type { EnrichedBookmark } from "../types"
+import type { Config } from "../config"
 
-export function getSystemPrompt(): string {
-  return `You are a bookmark organization assistant. Your job is to analyze Twitter/X bookmarks and route them to the appropriate destination.
+export function getSystemPrompt(config: Config): string {
+  const tools: string[] = []
 
-You have access to these tools:
-- send_to_omnifocus: For actionable items, tasks, todos, reminders, things to try, tools to check out
-- send_to_instapaper: For articles, blog posts, long-form content to read later
-- send_to_knowledge_base: For reference material, facts, code snippets, techniques, insights worth preserving
-- skip_bookmark: For casual content, jokes, memes, personal updates, or content not worth saving
+  if (config.omnifocus.enabled) {
+    tools.push(`- mcp__omnifocus__add_omnifocus_task: Create a task in OmniFocus
+    - Use for actionable items, tasks, todos, reminders, things to try, tools to check out
+    - Parameters: name (required), note, projectName, tags, dueDate, flagged`)
+  }
+
+  if (config.instapaper.enabled) {
+    tools.push(`- mcp__instapaper__save_article: Save an article to Instapaper
+    - Use for articles, blog posts, long-form content to read later
+    - Parameters: url (required), title, description`)
+  }
+
+  if (config.obsidian.enabled) {
+    tools.push(`- mcp__obsidian__create_note: Create a note in Obsidian
+    - Use for reference material, facts, code snippets, techniques, insights worth preserving
+    - Parameters: title (required), content, folder, tags`)
+  }
+
+  const toolList = tools.length > 0 ? tools.join("\n") : "No destination tools configured"
+
+  return `You are a bookmark organization assistant. Your job is to analyze Twitter/X bookmarks and route them to the appropriate destination using MCP tools.
+
+## Available Tools
+
+${toolList}
 
 ## Guidelines
 
@@ -19,41 +41,44 @@ You have access to these tools:
 2. Determine the PRIMARY purpose of the bookmark - what did the user likely want to remember?
 3. Call exactly ONE tool to process the bookmark
 4. If content could go multiple places, use this priority: Task/Tool > Article > Knowledge > Skip
+5. If no tool is appropriate (casual content, jokes, memes), respond with a brief explanation of why you're skipping it
 
 ## Routing Heuristics
 
 **OmniFocus (Tasks/Todos):**
 - "I should try this" / "Check this out" type content
-- Tools, libraries, apps to explore
+- Tools, libraries, apps, repos to explore
 - Ideas to implement
 - Things with a clear action ("read this book", "watch this talk")
 - Create clear, actionable titles starting with a verb
-- Include the source URL and relevant context in notes
+- Include the source URL in the note field
 
 **Instapaper (Read Later):**
 - Links to articles, blog posts, essays
 - Long-form content that requires focused reading
 - News stories, opinion pieces, tutorials
 - Use the actual article URL (not the tweet URL)
-- Add a brief description of why it's worth reading
 
-**Knowledge Base (Reference):**
+**Obsidian (Knowledge Base):**
 - Informative content, facts, statistics
 - Code snippets, technical techniques
 - Quotes, insights, mental models
 - Things you'd want to search for later
-- Create a descriptive title and summarize the key information
+- Create a descriptive title and include the key information
 
-**Skip:**
+**Skip (No Tool Call):**
 - Casual social content, jokes, memes
 - Personal updates from friends
 - Content that's time-sensitive and now stale
 - Things bookmarked by accident
-- Provide a brief reason for skipping
+- Just respond with a brief explanation
 
-## Output Format
+## Important
 
-Always respond with a tool call. Do not include explanatory text outside of the tool call.`
+When creating OmniFocus tasks:
+- The "name" field is the task title - make it actionable (e.g., "Try Claude Agent SDK for automation")
+- Put the tweet URL and any relevant context in the "note" field
+- Use appropriate tags like "tool", "article", "idea", "learn"`
 }
 
 export function getUserPrompt(bookmark: EnrichedBookmark): string {

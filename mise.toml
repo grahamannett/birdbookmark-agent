@@ -1,22 +1,129 @@
+# =============================================================================
+# BirdBookmark Agent - Task Runner Configuration
+# =============================================================================
+# Prerequisites:
+#   - AWS credentials in environment (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION)
+#   - Browser with Twitter/X session (for cookie extraction)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Setup
+# -----------------------------------------------------------------------------
+
+[tasks.setup]
+description = "Initial setup: extract cookies and verify configuration"
+run = """
+echo "==> Extracting Twitter/X cookies..."
+bun scripts/extract-bird-cookies.ts env docker/.bird.env
+echo ""
+echo "==> Verifying AWS credentials..."
+if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+  echo "WARNING: AWS_ACCESS_KEY_ID not set"
+else
+  echo "AWS credentials found"
+fi
+echo ""
+echo "==> Running quick test (dry-run, 1 bookmark)..."
+source docker/.bird.env && bun scripts/process-bookmarks.ts --dry-run --count 1
+"""
+
 [tasks."cookies:extract"]
 description = "Extract Twitter/X cookies from browser to docker/.bird.env"
 run = "bun scripts/extract-bird-cookies.ts env docker/.bird.env"
 
+# -----------------------------------------------------------------------------
+# Local Development (primary workflow)
+# -----------------------------------------------------------------------------
+
+[tasks.run]
+description = "Process bookmarks locally"
+depends = ["cookies:extract"]
+run = "source docker/.bird.env && bun scripts/process-bookmarks.ts"
+
+[tasks."run:dry"]
+description = "Process bookmarks locally (dry-run, no actions taken)"
+depends = ["cookies:extract"]
+run = "source docker/.bird.env && bun scripts/process-bookmarks.ts --dry-run"
+
+[tasks."run:list"]
+description = "List recently processed bookmarks"
+run = "bun scripts/process-bookmarks.ts --list"
+
+[tasks."run:reprocess"]
+description = "Reprocess a bookmark: mise run:reprocess -- -1 (or ID)"
+depends = ["cookies:extract"]
+run = "source docker/.bird.env && bun scripts/process-bookmarks.ts --reprocess=$1"
+
+[tasks.test]
+description = "Quick test: process 1 bookmark in dry-run mode"
+depends = ["cookies:extract"]
+run = "source docker/.bird.env && bun scripts/process-bookmarks.ts --dry-run --count 1"
+
+# -----------------------------------------------------------------------------
+# Docker (for deployment verification)
+# -----------------------------------------------------------------------------
+
 [tasks."docker:build"]
-description = "Build the bird docker image"
-run = "docker build -t birdapp:latest docker/"
+description = "Build the processor Docker image"
+run = "docker build -t birdprocessor:latest -f docker/Dockerfile.processor ."
 
 [tasks."docker:run"]
-description = "Run bird in docker (pass args after --)"
+description = "Run processor in Docker"
 depends = ["cookies:extract"]
-run = "docker run --env-file docker/.bird.env --rm -it birdapp:latest bird"
+run = """
+docker run --env-file docker/.bird.env \
+  -e AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY \
+  -e AWS_REGION \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config.json:/app/config.json:ro \
+  --rm birdprocessor:latest
+"""
+
+[tasks."docker:run:dry"]
+description = "Run processor in Docker (dry-run mode)"
+depends = ["cookies:extract"]
+run = """
+docker run --env-file docker/.bird.env \
+  -e AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY \
+  -e AWS_REGION \
+  -e DRY_RUN=true \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config.json:/app/config.json:ro \
+  --rm birdprocessor:latest
+"""
 
 [tasks."docker:shell"]
-description = "Open a shell in the bird docker container"
+description = "Open a shell in the Docker container for debugging"
 depends = ["cookies:extract"]
-run = "docker run --env-file docker/.bird.env --rm -it birdapp:latest bash"
+run = """
+docker run --env-file docker/.bird.env \
+  -e AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY \
+  -e AWS_REGION \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config.json:/app/config.json:ro \
+  --rm -it birdprocessor:latest bash
+"""
+
+# -----------------------------------------------------------------------------
+# Debug Utilities
+# -----------------------------------------------------------------------------
 
 [tasks."bird:bookmarks"]
-description = "Get your latest bookmarks via docker"
+description = "Fetch latest bookmarks (quick test of bird CLI + auth)"
 depends = ["cookies:extract"]
-run = "docker run --env-file docker/.bird.env --rm birdapp:latest bird bookmarks -n 5"
+run = "source docker/.bird.env && bird bookmarks -n 5"
+
+[tasks."state:show"]
+description = "Show full processed bookmark state"
+run = "cat data/processed.json | jq ."
+
+[tasks."state:recent"]
+description = "Show 10 most recently processed bookmarks"
+run = "cat data/processed.json | jq '.processed | to_entries | sort_by(.value.processedAt) | reverse | .[0:10]'"
+
+[tasks."state:reset"]
+description = "Reset all processed bookmark state (clears history)"
+run = "echo '{\"version\":1,\"lastRun\":\"'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'\",\"processed\":{}}' > data/processed.json"

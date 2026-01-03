@@ -1,46 +1,48 @@
 /**
  * Configuration management.
  * Loads from config.json with environment variable overrides.
+ *
+ * Agent SDK authentication is handled via environment variables:
+ * - ANTHROPIC_API_KEY for direct API
+ * - CLAUDE_CODE_USE_BEDROCK=1 + AWS credentials for Bedrock
  */
 
 import { existsSync, readFileSync } from "fs"
 import { join } from "path"
 
+/**
+ * MCP server configuration for Agent SDK.
+ */
+export interface McpServerConfig {
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
+
 export interface Config {
-  // Agent settings
-  model: string
-  maxTokens: number
-
-  // AWS Bedrock settings
-  aws?: {
-    accessKeyId?: string
-    secretAccessKey?: string
-    region?: string
-  }
-
   // Bookmark fetching
   bookmarkCount: number
 
   // State management
   statePath: string
 
-  // Destination configs
-  omnifocus?: {
+  // MCP server configurations (passed to Agent SDK)
+  mcpServers: Record<string, McpServerConfig>
+
+  // Destination enabled flags
+  omnifocus: {
     enabled: boolean
     defaultProject?: string
     defaultTags?: string[]
   }
 
-  instapaper?: {
+  instapaper: {
     enabled: boolean
-    username?: string
-    password?: string
   }
 
-  knowledgeBase?: {
+  obsidian: {
     enabled: boolean
-    path: string
-    format: "markdown" | "json"
+    vaultPath?: string
   }
 
   // Processing options
@@ -52,16 +54,28 @@ export interface Config {
     timeoutMs: number
   }
 
-  // Dry run mode
+  // Dry run mode (agent will analyze but not execute tools)
   dryRun: boolean
 }
 
 const DEFAULT_CONFIG: Config = {
-  // Bedrock model ID format
-  model: "us.anthropic.claude-sonnet-4-20250514-v1:0",
-  maxTokens: 1024,
   bookmarkCount: 20,
   statePath: "./data/processed.json",
+  mcpServers: {
+    omnifocus: {
+      command: "npx",
+      args: ["-y", "omnifocus-mcp"],
+    },
+  },
+  omnifocus: {
+    enabled: true,
+  },
+  instapaper: {
+    enabled: false,
+  },
+  obsidian: {
+    enabled: false,
+  },
   enrichment: {
     fetchArticles: true,
     fetchYouTube: true,
@@ -88,10 +102,6 @@ export function loadConfig(configPath?: string): Config {
   // Environment variable overrides
   const envOverrides: Partial<Config> = {}
 
-  if (process.env.ANTHROPIC_MODEL) {
-    envOverrides.model = process.env.ANTHROPIC_MODEL
-  }
-
   if (process.env.BOOKMARK_COUNT) {
     envOverrides.bookmarkCount = parseInt(process.env.BOOKMARK_COUNT, 10)
   }
@@ -109,10 +119,37 @@ export function loadConfig(configPath?: string): Config {
     ...DEFAULT_CONFIG,
     ...fileConfig,
     ...envOverrides,
+    mcpServers: {
+      ...DEFAULT_CONFIG.mcpServers,
+      ...fileConfig.mcpServers,
+    },
+    omnifocus: {
+      ...DEFAULT_CONFIG.omnifocus,
+      ...fileConfig.omnifocus,
+    },
+    instapaper: {
+      ...DEFAULT_CONFIG.instapaper,
+      ...fileConfig.instapaper,
+    },
+    obsidian: {
+      ...DEFAULT_CONFIG.obsidian,
+      ...fileConfig.obsidian,
+    },
     enrichment: {
       ...DEFAULT_CONFIG.enrichment,
       ...fileConfig.enrichment,
     },
+  }
+
+  // Add Obsidian MCP server if enabled and vault path is set
+  if (config.obsidian.enabled && config.obsidian.vaultPath) {
+    config.mcpServers.obsidian = {
+      command: "npx",
+      args: ["-y", "obsidian-mcp-server"],
+      env: {
+        OBSIDIAN_VAULT_PATH: config.obsidian.vaultPath,
+      },
+    }
   }
 
   return config

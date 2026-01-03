@@ -23,14 +23,12 @@ export async function extractArticle(
   timeoutMs: number = 30000
 ): Promise<ArticleContent | null> {
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    // Race the extraction against a timeout
+    const timeoutPromise = new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), timeoutMs)
+    )
 
-    const article = await extract(url, {
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeout)
+    const article = await Promise.race([extract(url), timeoutPromise])
 
     if (!article) return null
 

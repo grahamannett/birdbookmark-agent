@@ -29,7 +29,6 @@ import { fetchBookmarks, readTweet } from "../src/bookmarks/fetcher"
 import { StateManager } from "../src/state/processed"
 import { enrichBookmark } from "../src/enrichment"
 import { runAgent } from "../src/agent"
-import { DestinationRegistry } from "../src/destinations"
 import type { Bookmark } from "../src/types"
 
 const { values } = parseArgs({
@@ -47,7 +46,6 @@ async function processBookmark(
   bookmark: Bookmark,
   config: ReturnType<typeof loadConfig>,
   state: StateManager,
-  destinations: DestinationRegistry,
   index: string = ""
 ): Promise<boolean> {
   const prefix = index ? `${index} ` : ""
@@ -74,16 +72,20 @@ async function processBookmark(
       console.log(`  Enrichment: ${enrichmentInfo.join(", ")}`)
     }
 
-    // Run agent
+    // Run agent (Agent SDK with MCP)
     console.log(`  Running agent...`)
-    const result = await runAgent(enriched, config, destinations)
+    const result = await runAgent(enriched, config)
 
     if (result.success) {
-      console.log(`  ✓ ${result.toolUsed}: ${result.destinationResult?.message}`)
+      const toolsStr = result.toolsUsed.length > 0 ? result.toolsUsed.join(", ") : "skipped"
+      console.log(`  ✓ Tools used: ${toolsStr}`)
+      if (result.result) {
+        console.log(`  Result: ${result.result.slice(0, 100)}${result.result.length > 100 ? "..." : ""}`)
+      }
       state.markProcessed(bookmark.id, {
         author: bookmark.author.username,
-        destination: result.toolUsed || undefined,
-        action: result.toolUsed || undefined,
+        destination: result.toolsUsed[0] || "skipped",
+        action: result.toolsUsed[0] || "skipped",
         bookmark: bookmark, // Store the bookmark for future reprocessing
       })
       return true
@@ -128,8 +130,7 @@ async function listProcessed(state: StateManager): Promise<void> {
 async function reprocessBookmark(
   reprocessArg: string,
   config: ReturnType<typeof loadConfig>,
-  state: StateManager,
-  destinations: DestinationRegistry
+  state: StateManager
 ): Promise<void> {
   let bookmarkId: string
   let cachedBookmark: Bookmark | undefined
@@ -181,7 +182,7 @@ async function reprocessBookmark(
   }
 
   // Process it
-  const success = await processBookmark(bookmark, config, state, destinations)
+  const success = await processBookmark(bookmark, config, state)
 
   state.save()
 
@@ -208,30 +209,33 @@ async function main() {
   // Initialize state manager
   const state = new StateManager(config.statePath)
 
-  // Initialize destinations
-  const destinations = new DestinationRegistry(config)
-
   // Handle --list command
   if (values.list) {
     await listProcessed(state)
     return
   }
 
+  // Build list of enabled destinations
+  const enabledDestinations: string[] = []
+  if (config.omnifocus.enabled) enabledDestinations.push("OmniFocus")
+  if (config.instapaper.enabled) enabledDestinations.push("Instapaper")
+  if (config.obsidian.enabled) enabledDestinations.push("Obsidian")
+
   // Handle --reprocess command
   if (values.reprocess) {
     console.log("=== Bookmark Reprocessor ===\n")
     console.log(`Mode: ${config.dryRun ? "DRY RUN" : "LIVE"}`)
-    console.log(`Model: ${config.model}`)
+    console.log(`MCP Servers: ${Object.keys(config.mcpServers).join(", ")}`)
     console.log("")
-    await reprocessBookmark(values.reprocess, config, state, destinations)
+    await reprocessBookmark(values.reprocess, config, state)
     return
   }
 
   // Normal processing flow
-  console.log("=== Bookmark Processor ===\n")
+  console.log("=== Bookmark Processor (Agent SDK) ===\n")
   console.log(`Mode: ${config.dryRun ? "DRY RUN" : "LIVE"}`)
-  console.log(`Model: ${config.model}`)
   console.log(`Bookmark count: ${config.bookmarkCount}`)
+  console.log(`MCP Servers: ${Object.keys(config.mcpServers).join(", ")}`)
   console.log("")
 
   console.log(`State file: ${config.statePath}`)
@@ -245,7 +249,7 @@ async function main() {
     console.log(`Pruned ${pruned} old entries from state`)
   }
 
-  console.log(`Configured destinations: ${destinations.getConfiguredDestinations().join(", ") || "none"}`)
+  console.log(`Enabled destinations: ${enabledDestinations.join(", ") || "none"}`)
   console.log("")
 
   // Fetch bookmarks
@@ -280,7 +284,7 @@ async function main() {
     const bookmark = unprocessed[i]
     const progress = `[${i + 1}/${unprocessed.length}]`
 
-    const success = await processBookmark(bookmark, config, state, destinations, progress)
+    const success = await processBookmark(bookmark, config, state, progress)
     if (success) {
       successCount++
     } else {
